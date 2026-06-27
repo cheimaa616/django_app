@@ -4,41 +4,45 @@
 <div class="row justify-content-center">
     <div class="col-md-6">
         <div class="card p-4">
-            <h2 class="mb-4">Sign PDF Document</h2>
+            <h2 class="mb-1">Signer un document PDF</h2>
+            <p class="text-muted mb-4 small">
+                Une paire de clés cryptographiques (ECDSA P-256) sera générée
+                automatiquement et associée à votre signature.
+            </p>
+
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
+
                 <div class="mb-3">
-                    <label for="pdf_file" class="form-label">PDF Document to Sign</label>
-                    <input class="form-control" type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
-                    <div class="form-text">Max size: 50MB.</div>
-                </div>
-                
-                <div class="mb-3">
-                    <label for="key_id" class="form-label">Select Signing Key</label>
-                    <select class="form-select" id="key_id" name="key_id" required>
-                        <option value="" selected disabled>Choose a key...</option>
-                        {% for key in keys %}
-                        <option value="{{ key.id }}">{{ key.name }}</option>
-                        {% endfor %}
-                    </select>
+                    <label for="pdf_file" class="form-label">Document PDF à signer</label>
+                    <input class="form-control" type="file" id="pdf_file" name="pdf_file"
+                           accept=".pdf" required>
+                    <div class="form-text">Taille maximale : 100 Mo.</div>
                 </div>
 
                 <div class="row mb-3">
                     <div class="col">
-                        <label for="signer_name" class="form-label">Signer Name</label>
-                        <input type="text" class="form-control" id="signer_name" name="signer_name" value="Admin" required>
+                        <label for="signer_name" class="form-label">Nom du signataire</label>
+                        <input type="text" class="form-control" id="signer_name"
+                               name="signer_name" placeholder="Ex. Jean Dupont" required>
                     </div>
                     <div class="col">
                         <label for="version" class="form-label">Version</label>
-                        <input type="text" class="form-control" id="version" name="version" value="1.0" required>
+                        <input type="text" class="form-control" id="version"
+                               name="version" value="1.0" required>
                     </div>
                 </div>
 
                 <div class="alert alert-info small mb-4">
-                    The system will compute a SHA-256 hash, sign it with ECDSA, and embed a verification QR code in the resulting PDF.
+                    <strong>Comment ça fonctionne :</strong><br>
+                    Le système calcule un hash SHA-256 du document, génère une clé ECDSA,
+                    signe le hash, puis intègre un QR Code de vérification dans le PDF.
+                    La clé publique est enregistrée pour les vérifications futures.
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100">Sign and Generate QR</button>
+                <button type="submit" class="btn btn-primary w-100">
+                    ✍️ Signer et générer le QR Code
+                </button>
             </form>
         </div>
     </div>
