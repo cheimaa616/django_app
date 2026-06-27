@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card p-4">
+    <h2>Audit Logs (Append-Only)</h2>
+    <p class="text-muted">History of all signing and verification events.</p>
+    
+    <div class="table-responsive">
+        <table class="table table-hover table-sm">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Event</th>
+                    <th>Document ID</th>
+                    <th>Result</th>
+                    <th>Details / Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td><small>{{ log.timestamp|date:"Y-m-d H:i:s" }}</small></td>
+                    <td>
+                        <span class="badge {% if log.event == 'SIGN' %}bg-primary{% else %}bg-info{% endif %}">
+                            {{ log.event }}
+                        </span>
+                    </td>
+                    <td><code title="{{ log.document_id }}">{{ log.document_id|truncatechars:15 }}</code></td>
+                    <td>
+                        {% if log.result %}
+                        <span class="badge {% if log.result == 'VALID' %}bg-success{% elif log.result == 'OBSOLETE' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                            {{ log.result }}
+                        </span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small>
+                            {% if log.reason %}
+                                {{ log.reason }}
+                            {% else %}
+                                {{ log.details.filename }} (v{{ log.details.version }}) signed by {{ log.details.signer }}
+                            {% endif %}
+                        </small>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4">No audit logs yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

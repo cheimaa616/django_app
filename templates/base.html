@@ -1,0 +1,59 @@
+{% load django_bootstrap5 %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Signer - Django</title>
+    {% bootstrap_css %}
+    <style>
+        body { background-color: #f8f9fa; }
+        .navbar-brand { font-weight: bold; }
+        .card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-primary { border-radius: 20px; }
+        .status-valid { color: #198754; font-weight: bold; }
+        .status-obsolete { color: #ffc107; font-weight: bold; }
+        .status-invalid { color: #dc3545; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'dashboard' %}">PDF Signer</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'document_list' %}">Documents</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'sign_document' %}">Sign PDF</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'key_list' %}">Keys</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'audit_logs' %}">Audit Logs</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% bootstrap_messages %}
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer class="mt-5 py-3 text-center text-muted border-top">
+        &copy; 2026 PDF Signer Project - Django Edition
+    </footer>
+
+    {% bootstrap_javascript %}
+</body>
+</html>

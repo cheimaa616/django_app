@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2>Document Details</h2>
+                    <p class="text-muted">{{ doc.filename }}</p>
+                </div>
+                <div class="text-end">
+                    {% if is_latest %}
+                    <div class="alert alert-success py-2 px-3 mb-0">
+                        <strong><i class="bi bi-check-circle"></i> VALID / CURRENT</strong>
+                        <div class="small">Vous consultez déjà la dernière version officielle.</div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning py-2 px-3 mb-0">
+                        <strong><i class="bi bi-exclamation-triangle"></i> DOCUMENT OBSOLÈTE</strong>
+                        <div class="small">Une version plus récente (v{{ latest_version }}) est disponible.</div>
+                        <a href="{% url 'doc_detail' doc.document_id %}" class="btn btn-sm btn-warning mt-2">
+                            Télécharger la dernière version officielle
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <hr>
+
+            <div class="row mt-4">
+                <div class="col-sm-4 font-weight-bold">Document ID:</div>
+                <div class="col-sm-8 text-break"><code>{{ doc.document_id }}</code></div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm-4 font-weight-bold">Version:</div>
+                <div class="col-sm-8">v{{ doc.version }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm-4 font-weight-bold">Signer:</div>
+                <div class="col-sm-8">{{ doc.signer_name }}</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm-4 font-weight-bold">Signed At:</div>
+                <div class="col-sm-8">{{ doc.timestamp|date:"Y-m-d H:i:s" }} (UTC)</div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm-4 font-weight-bold">SHA-256 Hash:</div>
+                <div class="col-sm-8 text-break"><code>{{ doc.file_hash }}</code></div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-sm-4 font-weight-bold">Signature (ECDSA):</div>
+                <div class="col-sm-8 text-break"><small class="text-muted">{{ doc.signature|truncatechars:100 }}</small></div>
+            </div>
+
+            <div class="mt-4">
+                <a href="{{ doc.pdf_file.url }}" class="btn btn-primary" download>
+                    Download Signed PDF
+                </a>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <h4>Version History</h4>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Version</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in history %}
+                        <tr {% if h.version == doc.version %}class="table-info"{% endif %}>
+                            <td>v{{ h.version }}</td>
+                            <td>{{ h.timestamp|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                {% if h.is_latest %}
+                                <span class="badge bg-success">Latest</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Archived</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'doc_detail_version' h.document_id h.version %}" class="btn btn-link btn-sm p-0">View</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-4 mb-4 text-center">
+            <h5>Verification QR Code</h5>
+            <div class="my-3">
+                <img src="{{ doc.qr_code_file.url }}" alt="QR Code" class="img-fluid border p-2" style="max-width: 200px;">
+            </div>
+            <p class="small text-muted">Scan this QR to verify the document status instantly from any device.</p>
+        </div>
+
+        <div class="card p-4">
+            <h5>Audit Activity</h5>
+            <div class="small">
+                {% for log in doc.audit_logs %}
+                <div class="mb-2 border-bottom pb-1">
+                    <strong>{{ log.event }}</strong> at {{ log.timestamp|date:"H:i" }}
+                    <br><span class="text-muted">{{ log.reason }}</span>
+                </div>
+                {% empty %}
+                <p class="text-muted">No specific audit activity for this version.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

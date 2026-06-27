@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card p-4">
+            <h2 class="mb-4">Sign PDF Document</h2>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="pdf_file" class="form-label">PDF Document to Sign</label>
+                    <input class="form-control" type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                    <div class="form-text">Max size: 50MB.</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="key_id" class="form-label">Select Signing Key</label>
+                    <select class="form-select" id="key_id" name="key_id" required>
+                        <option value="" selected disabled>Choose a key...</option>
+                        {% for key in keys %}
+                        <option value="{{ key.id }}">{{ key.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col">
+                        <label for="signer_name" class="form-label">Signer Name</label>
+                        <input type="text" class="form-control" id="signer_name" name="signer_name" value="Admin" required>
+                    </div>
+                    <div class="col">
+                        <label for="version" class="form-label">Version</label>
+                        <input type="text" class="form-control" id="version" name="version" value="1.0" required>
+                    </div>
+                </div>
+
+                <div class="alert alert-info small mb-4">
+                    The system will compute a SHA-256 hash, sign it with ECDSA, and embed a verification QR code in the resulting PDF.
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Sign and Generate QR</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
