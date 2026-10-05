@@ -90,26 +90,25 @@ class CryptoService:
         file_hash = compute_sha256(pdf_file_path)
 
         # — Résolution de la clé —
+                # — Résolution de la clé —
         if key_obj is None:
-            # Auto-génération : une clé par acte de signature
-            private_key_obj, public_pem, private_pem = self._generate_raw_key_pair()
+            # Une clé par signataire : réutilisée pour tous ses documents/versions
+            key_name = signer_name.strip().lower()
+            key_obj = SigningKey.objects.filter(name=key_name).first()
+            if key_obj is None:
+                _, public_pem, private_pem = self._generate_raw_key_pair()
+                key_obj = SigningKey.objects.create(
+                    name=key_name,
+                    public_key=public_pem,
+                    private_key=private_pem,
+                )
 
-            # Nom unique : "signataire — horodatage"
-            key_name = f"{signer_name} — {timezone.now().strftime('%Y%m%d-%H%M%S')}"
-            key_obj = SigningKey.objects.create(
-                name=key_name,
-                public_key=public_pem,
-                # La clé privée est stockée pour permettre un re-signing
-                # si nécessaire (optionnel : mettre '' pour ne jamais la stocker)
-                private_key=private_pem,
-            )
-        else:
-            # Clé fournie explicitement — chargement depuis le PEM stocké
-            private_key_obj = serialization.load_pem_private_key(
-                key_obj.private_key.encode('utf-8'),
-                password=None,
-                backend=default_backend(),
-            )
+        # Chargement de la clé privée (que la clé soit nouvelle, existante ou fournie)
+        private_key_obj = serialization.load_pem_private_key(
+            key_obj.private_key.encode('utf-8'),
+            password=None,
+            backend=default_backend(),
+        )
 
         # — Signature ECDSA —
         signature_bytes = private_key_obj.sign(

@@ -16,7 +16,8 @@ from rest_framework import status
 from .models import SigningKey, SignedDocument, AuditLog
 from .serializers import SignedDocumentSerializer, AuditLogSerializer
 from .services.crypto import CryptoService
-from .services.qr_service import QRService
+from .forms import QRPlacementForm
+from .services.qr_service import QRService, get_pdf_page_count, resolve_pages
 
 crypto_service = CryptoService()
 qr_service = QRService()
@@ -43,18 +44,14 @@ def dashboard(request):
 
 def sign_document(request):
     """
-    L'utilisateur fournit uniquement :
-      - le fichier PDF
-      - son nom (signataire)
-      - le numéro de version
-
-    Le système génère automatiquement la paire de clés ECDSA,
-    signe le document et produit le QR Code d'un seul tenant.
+    L'utilisateur fournit : le PDF, son nom, la version, et les options de
+    placement du QR Code (pages + position).
     """
     if request.method == 'POST':
         pdf_file = request.FILES.get('pdf_file')
         signer_name = request.POST.get('signer_name', '').strip()
         version = request.POST.get('version', '1.0').strip()
+        form = QRPlacementForm(request.POST)
 
         if not pdf_file:
             messages.error(request, "Veuillez sélectionner un fichier PDF.")
@@ -62,22 +59,36 @@ def sign_document(request):
         if not signer_name:
             messages.error(request, "Le nom du signataire est obligatoire.")
             return redirect('sign_document')
+        if not form.is_valid():
+            # Re-render (no redirect) so the user's choices and errors stay visible
+            return render(request, 'sign_doc.html', {'form': form})
 
-        # Sauvegarde temporaire du fichier uploadé
+        page_mode = form.cleaned_data['page_mode']
+        specific_pages = form.cleaned_data['specific_pages']
+        position = form.cleaned_data['position']
+
         temp_path = default_storage.save('temp/' + pdf_file.name, ContentFile(pdf_file.read()))
         full_temp_path = os.path.join(settings.MEDIA_ROOT, temp_path)
 
         try:
-            # 1. Signature + auto-génération de clé
-            # key_obj=None → CryptoService génère la paire automatiquement
+            # 0. Validate pages BEFORE signing, so a bad page number
+            #    never leaves orphan keys / documents / audit rows.
+            total_pages = get_pdf_page_count(full_temp_path)
+            try:
+                page_indices = resolve_pages(page_mode, specific_pages, total_pages)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return render(request, 'sign_doc.html', {'form': form})
+
+            # 1. Signature + auto-génération de clé (inchangé)
             signed_doc = crypto_service.sign_pdf(
                 pdf_file_path=full_temp_path,
                 signer_name=signer_name,
                 version=version,
-                key_obj=None,   # ← déclencheur de l'auto-génération
+                key_obj=None,
             )
 
-            # 2. Génération du QR Code (URL LAN depuis SITE_URL)
+            # 2. QR Code (inchangé)
             qr_filename = f"{signed_doc.document_id}_v{version}_qr.png"
             qr_rel_path = f"qrs/{qr_filename}"
             qr_full_path = os.path.join(settings.MEDIA_ROOT, qr_rel_path)
@@ -86,19 +97,24 @@ def sign_document(request):
             qr_service.generate_verification_qr(str(signed_doc.document_id), qr_full_path)
             signed_doc.qr_code_file = qr_rel_path
 
-            # 3. Intégration du QR dans le PDF
+            # 3. Intégration du QR dans les pages choisies, à la position choisie
             signed_pdf_name = f"{signed_doc.document_id}_v{version}_signed.pdf"
             signed_pdf_rel_path = f"signed_pdfs/{signed_pdf_name}"
             signed_pdf_full_path = os.path.join(settings.MEDIA_ROOT, signed_pdf_rel_path)
             os.makedirs(os.path.dirname(signed_pdf_full_path), exist_ok=True)
 
-            qr_service.embed_qr_in_pdf(full_temp_path, qr_full_path, signed_pdf_full_path)
+            qr_service.embed_qr_in_pdf(
+                full_temp_path, qr_full_path, signed_pdf_full_path,
+                page_indices=page_indices,
+                position=position,
+            )
             signed_doc.pdf_file = signed_pdf_rel_path
             signed_doc.save()
 
             messages.success(
                 request,
                 f"✅ Document « {signed_doc.filename} » signé avec succès (v{version}). "
+                f"QR Code ajouté sur {len(page_indices)} page(s). "
                 f"Une paire de clés a été générée automatiquement."
             )
             return redirect('doc_detail_version', doc_id=signed_doc.document_id, version=signed_doc.version)
@@ -117,7 +133,7 @@ def sign_document(request):
 
         return redirect('sign_document')
 
-    return render(request, 'sign_doc.html')
+    return render(request, 'sign_doc.html', {'form': QRPlacementForm()})
 
 
 # ─────────────────────────────────────────────

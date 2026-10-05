@@ -32,7 +32,43 @@
                                name="version" value="1.0" required>
                     </div>
                 </div>
+                                <div class="mb-3">
+                    <label class="form-label fw-bold">{{ form.page_mode.label }}</label>
+                    {% for radio in form.page_mode %}
+                    <div class="form-check">
+                        {{ radio.tag }}
+                        <label class="form-check-label" for="{{ radio.id_for_label }}">
+                            {{ radio.choice_label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                    {% for error in form.page_mode.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
 
+                    <div id="specific-pages-group" class="mt-2" style="display:none;">
+                        {{ form.specific_pages }}
+                        <div class="form-text">Séparez les numéros par des virgules (ex. 1, 3, 5).</div>
+                        {% for error in form.specific_pages.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold">{{ form.position.label }}</label>
+                    {% for radio in form.position %}
+                    <div class="form-check">
+                        {{ radio.tag }}
+                        <label class="form-check-label" for="{{ radio.id_for_label }}">
+                            {{ radio.choice_label }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                    {% for error in form.position.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
                 <div class="alert alert-info small mb-4">
                     <strong>Comment ça fonctionne :</strong><br>
                     Le système calcule un hash SHA-256 du document, génère une clé ECDSA,
@@ -47,4 +83,16 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    var group = document.getElementById('specific-pages-group');
+    var radios = document.querySelectorAll('input[name="page_mode"]');
+    function toggle() {
+        var sel = document.querySelector('input[name="page_mode"]:checked');
+        group.style.display = (sel && sel.value === 'specific') ? '' : 'none';
+    }
+    radios.forEach(function (r) { r.addEventListener('change', toggle); });
+    toggle();
+})();
+</script>
 {% endblock %}
