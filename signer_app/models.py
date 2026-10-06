@@ -29,6 +29,14 @@ class SignedDocument(models.Model):
 
     class Meta:
         unique_together = ('document_id', 'version')
+        constraints = [
+            # At most ONE current version per document, enforced by the DB
+            models.UniqueConstraint(
+                fields=['document_id'],
+                condition=models.Q(is_latest=True),
+                name='one_latest_per_document',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.filename} - v{self.version}"

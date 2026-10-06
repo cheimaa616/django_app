@@ -10,6 +10,8 @@ from reportlab.pdfgen import canvas
 from PyPDF2 import PdfReader, PdfWriter
 from django.conf import settings
 
+from urllib.parse import quote
+
 QR_SIZE = 120   # unchanged
 MARGIN = 20     # unchanged
 
@@ -107,9 +109,9 @@ class QRService:
         qr.make(fit=True)
         return qr.make_image(fill_color="black", back_color="white")
 
-    def generate_verification_qr(self, document_id: str, output_path: str) -> str:
+    def generate_verification_qr(self, document_id: str, version: str, output_path: str) -> str:
         site_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000')
-        verify_url = f"{site_url}/verify/{document_id}/"
+        verify_url = f"{site_url}/verify/{document_id}/{quote(str(version), safe='')}/"
         img = self._create_qr_image(verify_url)
         img.save(output_path)
         return output_path

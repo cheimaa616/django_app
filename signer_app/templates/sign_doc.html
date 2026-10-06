@@ -12,6 +12,21 @@
 
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="parent_document" class="form-label">Type de signature</label>
+                    <select class="form-select" id="parent_document" name="parent_document">
+                        <option value="">Nouveau document</option>
+                        {% for d in existing_docs %}
+                        <option value="{{ d.document_id }}"
+                            {% if d.document_id|stringformat:"s" == selected_parent %}selected{% endif %}>
+                            Nouvelle version de : {{ d.filename }} (actuelle : v{{ d.version }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Choisir un document existant rend ses versions précédentes obsolètes.</div>
+                </div>
+
 
                 <div class="mb-3">
                     <label for="pdf_file" class="form-label">Document PDF à signer</label>

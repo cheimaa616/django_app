@@ -11,6 +11,8 @@ import os
 import uuid
 from typing import Dict, Any, Optional
 
+from django.db import transaction
+
 import cryptography.hazmat.primitives
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -24,6 +26,9 @@ from ..models import SigningKey, SignedDocument, AuditLog
 
 CURVE = ec.SECP256R1()
 
+
+class VersionExistsError(Exception):
+    pass
 
 class CryptoService:
     """Gestion des clés ECDSA, signature et vérification."""
@@ -74,92 +79,68 @@ class CryptoService:
         pdf_file_path: str,
         signer_name: str,
         version: str = "1.0",
-        document_id: Optional[str] = None,
+        document_id: Optional[str] = None,   # given => new version of that document
         key_obj: Optional[SigningKey] = None,
+        filename: Optional[str] = None,      # real uploaded name (not the temp name)
     ) -> SignedDocument:
-        """
-        Signe un PDF et retourne l'enregistrement SignedDocument.
-
-        Si `key_obj` est None (usage normal), une paire de clés ECDSA est
-        générée automatiquement :
-          - La clé publique est enregistrée dans SigningKey sous le nom du signataire.
-          - La clé privée est utilisée pour signer puis immédiatement détruite.
-
-        Si `key_obj` est fourni (rétro-compatibilité), il est utilisé tel quel.
-        """
         file_hash = compute_sha256(pdf_file_path)
+        filename = filename or os.path.basename(pdf_file_path)
 
-        # — Résolution de la clé —
-                # — Résolution de la clé —
-        if key_obj is None:
-            # Une clé par signataire : réutilisée pour tous ses documents/versions
-            key_name = signer_name.strip().lower()
-            key_obj = SigningKey.objects.filter(name=key_name).first()
+        with transaction.atomic():
             if key_obj is None:
-                _, public_pem, private_pem = self._generate_raw_key_pair()
-                key_obj = SigningKey.objects.create(
-                    name=key_name,
-                    public_key=public_pem,
-                    private_key=private_pem,
-                )
+                key_name = signer_name.strip().lower()
+                key_obj = SigningKey.objects.filter(name=key_name).first()
+                if key_obj is None:
+                    _, public_pem, private_pem = self._generate_raw_key_pair()
+                    key_obj = SigningKey.objects.create(
+                        name=key_name, public_key=public_pem, private_key=private_pem,
+                    )
 
-        # Chargement de la clé privée (que la clé soit nouvelle, existante ou fournie)
-        private_key_obj = serialization.load_pem_private_key(
-            key_obj.private_key.encode('utf-8'),
-            password=None,
-            backend=default_backend(),
-        )
+            private_key_obj = serialization.load_pem_private_key(
+                key_obj.private_key.encode('utf-8'),
+                password=None,
+                backend=default_backend(),
+            )
+            signature_b64 = base64_encode(
+                private_key_obj.sign(file_hash.encode('utf-8'), ec.ECDSA(hashes.SHA256()))
+            )
 
-        # — Signature ECDSA —
-        signature_bytes = private_key_obj.sign(
-            file_hash.encode('utf-8'),
-            ec.ECDSA(hashes.SHA256()),
-        )
-        signature_b64 = base64_encode(signature_bytes)
-
-        # — Gestion des versions —
-        if not document_id:
-            filename = os.path.basename(pdf_file_path)
-            existing = SignedDocument.objects.filter(
-                filename=filename, is_latest=True
-            ).first()
-            if existing:
-                document_id = str(existing.document_id)
-                existing.is_latest = False
-                existing.save()
+            # — Versioning: explicit identity, old version demoted atomically —
+            if document_id:
+                document_id = str(document_id)
+                siblings = SignedDocument.objects.select_for_update().filter(document_id=document_id)
+                if not siblings.exists():
+                    raise ValueError("Le document parent est introuvable.")
+                if siblings.filter(version=version).exists():
+                    raise VersionExistsError(version)
+                siblings.filter(is_latest=True).update(is_latest=False)   # V(n-1) -> OBSOLETE
             else:
                 document_id = str(uuid.uuid4())
-        else:
-            SignedDocument.objects.filter(document_id=document_id).update(is_latest=False)
 
-        # — Création de l'enregistrement —
-        signed_doc = SignedDocument.objects.create(
-            document_id=document_id,
-            filename=os.path.basename(pdf_file_path),
-            version=version,
-            timestamp=timezone.now(),
-            file_hash=file_hash,
-            signature=signature_b64,
-            signer_name=signer_name,
-            public_key=key_obj.public_key,
-            is_latest=True,
-        )
+            signed_doc = SignedDocument.objects.create(
+                document_id=document_id,
+                filename=filename,
+                version=version,
+                timestamp=timezone.now(),
+                file_hash=file_hash,
+                signature=signature_b64,
+                signer_name=signer_name,
+                public_key=key_obj.public_key,
+                is_latest=True,
+            )
 
-        # — Journal d'audit —
-        AuditLog.objects.create(
-            event='SIGN',
-            document_id=str(document_id),
-            details={
-                "filename": signed_doc.filename,
-                "version": version,
-                "signer": signer_name,
-                "hash": file_hash,
-                "key_name": key_obj.name,
-            },
-        )
-
+            AuditLog.objects.create(
+                event='SIGN',
+                document_id=str(document_id),
+                details={
+                    "filename": signed_doc.filename,
+                    "version": version,
+                    "signer": signer_name,
+                    "hash": file_hash,
+                    "key_name": key_obj.name,
+                },
+            )
         return signed_doc
-
     # ──────────────────────────────────────────────
     # Vérification
     # ──────────────────────────────────────────────
@@ -180,50 +161,41 @@ class CryptoService:
         except (InvalidSignature, Exception):
             return False
 
-    def verify_document_by_id(self, doc_id: str) -> Dict[str, Any]:
+    def verify_document_by_id(self, doc_id: str, version: Optional[str] = None) -> Dict[str, Any]:
         """
-        Vérifie un document à partir de son identifiant en base.
-        Utilisé lors du scan QR : pas besoin de re-uploader le PDF.
-        Vérifie la cohérence de la signature stockée et le statut de version.
+        Verifies ONE specific version (the one in the QR). Status comes from the
+        is_latest flag in the DB, never from comparing file hashes.
+        Without `version` (legacy QR codes) the current version is checked.
         """
         try:
-            doc = SignedDocument.objects.filter(document_id=doc_id).order_by('-timestamp').first()
+            versions = SignedDocument.objects.filter(document_id=doc_id)
+            if version:
+                doc = versions.filter(version=version).first()
+            else:
+                doc = versions.filter(is_latest=True).first() or versions.order_by('-timestamp').first()
             if not doc:
                 return {"result": "INVALID", "reason": "Document introuvable en base de données."}
 
-            # Vérification de la signature cryptographique (hash stocké vs signature stockée)
+            latest_doc = versions.filter(is_latest=True).first()
             sig_valid = self.verify_signature(doc.file_hash, doc.signature, doc.public_key)
 
-            # Vérification de version
-            latest_doc = SignedDocument.objects.filter(document_id=doc_id, is_latest=True).first()
-            is_latest = latest_doc and (doc.version == latest_doc.version)
-
             if not sig_valid:
-                result = "INVALID"
-                reason = "La signature numérique est invalide ou corrompue."
-            elif not is_latest:
+                result, reason = "INVALID", "La signature numérique est invalide ou corrompue."
+            elif latest_doc and latest_doc.pk != doc.pk:
                 result = "OBSOLETE"
-                reason = f"Une version plus récente existe : v{latest_doc.version}"
+                reason = (f"La version v{doc.version} a été remplacée par la "
+                          f"version v{latest_doc.version}.")
             else:
-                result = "VALID"
-                reason = "Document authentique — signature et version vérifiées."
+                result, reason = "VALID", "Document authentique — signature et version vérifiées."
 
-            # Journal
             AuditLog.objects.create(
                 event='VERIFY',
                 document_id=str(doc_id),
                 result=result,
                 reason=reason,
-                details={"method": "qr_scan"},
+                details={"method": "qr_scan", "version": doc.version},
             )
-
-            return {
-                "result": result,
-                "reason": reason,
-                "document": doc,
-                "latest_doc": latest_doc,
-            }
-
+            return {"result": result, "reason": reason, "document": doc, "latest_doc": latest_doc}
         except Exception as e:
             return {"result": "INVALID", "reason": str(e)}
 

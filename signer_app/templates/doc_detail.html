@@ -56,7 +56,10 @@
 
             <div class="mt-4">
                 <a href="{{ doc.pdf_file.url }}" class="btn btn-primary" download>
-                    Download Signed PDF
+                   Download Signed PDF
+                </a>
+                <a href="{% url 'sign_document' %}?doc={{ doc.document_id }}" class="btn btn-outline-secondary ms-2">
+                   Signer une nouvelle version
                 </a>
             </div>
         </div>
@@ -108,7 +111,7 @@
         <div class="card p-4">
             <h5>Audit Activity</h5>
             <div class="small">
-                {% for log in doc.audit_logs %}
+                {% for log in audit_logs %}
                 <div class="mb-2 border-bottom pb-1">
                     <strong>{{ log.event }}</strong> at {{ log.timestamp|date:"H:i" }}
                     <br><span class="text-muted">{{ log.reason }}</span>
